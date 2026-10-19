@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FDTD Wave Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <h1>FDTD <span>Wave</span> Lab</h1>
+  <p class="sub">A two-dimensional solver for Maxwell's equations. Every frame advances the electric and magnetic fields on a grid with the Yee finite-difference scheme. Click the field to add sources or draw conductors and glass.</p>
+</div></header>
+
+<main class="wrap bench">
+  <section class="stage">
+    <div class="presets" id="presets"></div>
+    <div class="screen">
+      <canvas id="field" width="320" height="180"></canvas>
+      <canvas id="overlay" aria-label="Simulation field. Click or drag to use the selected tool."></canvas>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="toolbar">
+      <button class="btn primary" id="play">Pause</button>
+      <button class="btn" id="stepBtn">Step</button>
+      <button class="btn" id="resetFields">Reset fields</button>
+      <button class="btn" id="viewField" aria-pressed="true">Field E<sub>z</sub></button>
+      <button class="btn" id="viewInt" aria-pressed="false">Intensity ⟨E<sub>z</sub>²⟩</button>
+    </div>
+  </section>
+
+  <aside class="rack">
+    <div class="group">
+      <div class="label">Click tool</div>
+      <div class="tools" id="tools">
+        <button class="tool" data-tool="source" aria-pressed="true"><span class="sw" style="background:var(--accent);border-radius:50%"></span>Source</button>
+        <button class="tool" data-tool="conductor" aria-pressed="false"><span class="sw" style="background:var(--conductor)"></span>Conductor</button>
+        <button class="tool" data-tool="glass" aria-pressed="false"><span class="sw" style="background:var(--glass)"></span>Glass</button>
+        <button class="tool" data-tool="erase" aria-pressed="false"><span class="sw" style="border:1px dashed var(--muted)"></span>Erase</button>
+      </div>
+      <p class="hint" id="toolHint">Click to add a point source. Click a source again to remove it.</p>
+    </div>
+    <div class="group">
+      <div class="label">Wave</div>
+      <div class="slider"><div class="row"><label for="lam">Wavelength</label><output id="lamOut"></output></div><input type="range" id="lam" min="10" max="40" step="1" value="18"></div>
+      <div class="slider"><div class="row"><label for="speed">Simulation speed</label><output id="speedOut"></output></div><input type="range" id="speed" min="1" max="8" step="1" value="3"></div>
+      <div class="slider"><div class="row"><label for="gain">Brightness</label><output id="gainOut"></output></div><input type="range" id="gain" min="0.3" max="3" step="0.1" value="1"></div>
+    </div>
+    <div class="group">
+      <div class="label">Glass</div>
+      <div class="slider"><div class="row"><label for="nIdx">Refractive index n</label><output id="nOut"></output></div><input type="range" id="nIdx" min="1.1" max="3" step="0.05" value="1.5"></div>
+    </div>
+    <div class="group" id="phaseGroup" hidden>
+      <div class="label">Antenna array</div>
+      <div class="slider"><div class="row"><label for="phase">Phase step Δφ</label><output id="phaseOut"></output></div><input type="range" id="phase" min="-180" max="180" step="5" value="0"></div>
+      <p class="hint">Delaying each antenna slightly steers the beam without moving anything.</p>
+    </div>
+    <button class="btn" id="clearAll">Clear sources and drawings</button>
+  </aside>
+</main>
+
+<section class="wrap notes">
+  <div>
+    <h2 id="exTitle"></h2>
+    <div id="exBody"></div>
+    <p id="readout" class="readout" hidden></p>
+  </div>
+  <div>
+    <h2>The update equations</h2>
+    <p>In 2D with E pointing out of the screen (TM<sub>z</sub> mode), Maxwell's curl equations reduce to three coupled equations:</p>
+<pre class="eq">∂Ez/∂t =  (1/ε) (∂Hy/∂x − ∂Hx/∂y)
+∂Hx/∂t = −(1/μ)  ∂Ez/∂y
+∂Hy/∂t =  (1/μ)  ∂Ez/∂x</pre>
+    <p>The Yee grid staggers E and H by half a cell in space and half a step in time, so each update uses centered differences:</p>
+<pre class="eq">Hx[i,j] ← Hx[i,j] − S (Ez[i,j+1] − Ez[i,j])
+Hy[i,j] ← Hy[i,j] + S (Ez[i+1,j] − Ez[i,j])
+Ez[i,j] ← Ez[i,j] + (S/εr) [ (Hy[i,j] − Hy[i−1,j])
+                           − (Hx[i,j] − Hx[i,j−1]) ]
+<span class="c">S = cΔt/Δx = 0.5   (2D stability needs S ≤ 1/√2)</span></pre>
+    <p>Fields are normalized so E and H share units. A conductor forces E<sub>z</sub> = 0. Glass has ε<sub>r</sub> = n², which slows the wave to c/n. The edges are wrapped in a 20-cell absorbing layer with graded, impedance-matched loss, so waves leave the screen instead of bouncing back.</p>
+  </div>
+</section>
+
+<!-- Plain scripts (not ES modules) so the page also runs when opened straight from disk. -->
+<script src="js/solver.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/render.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
