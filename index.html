@@ -57,6 +57,14 @@
       <div class="slider"><div class="row"><label for="phase">Phase step Δφ</label><output id="phaseOut"></output></div><input type="range" id="phase" min="-180" max="180" step="5" value="0"></div>
       <p class="hint">Delaying each antenna slightly steers the beam without moving anything.</p>
     </div>
+    <div class="group">
+      <div class="label">Simulation edges</div>
+      <div class="tools" id="bounds">
+        <button class="tool" data-b="pml" aria-pressed="true">PML</button>
+        <button class="tool" data-b="graded" aria-pressed="false">Graded loss</button>
+      </div>
+      <p class="hint">The PML absorbs waves arriving at any angle. The graded layer reflects about 1–2%, which shows up as faint ripples coming back from the edges, most visibly in the corners.</p>
+    </div>
     <button class="btn" id="clearAll">Clear sources and drawings</button>
   </aside>
 </main>
@@ -79,13 +87,14 @@ Hy[i,j] ← Hy[i,j] + S (Ez[i+1,j] − Ez[i,j])
 Ez[i,j] ← Ez[i,j] + (S/εr) [ (Hy[i,j] − Hy[i−1,j])
                            − (Hx[i,j] − Hx[i,j−1]) ]
 <span class="c">S = cΔt/Δx = 0.5   (2D stability needs S ≤ 1/√2)</span></pre>
-    <p>Fields are normalized so E and H share units. A conductor forces E<sub>z</sub> = 0. Glass has ε<sub>r</sub> = n², which slows the wave to c/n. The edges are wrapped in a 20-cell absorbing layer with graded, impedance-matched loss, so waves leave the screen instead of bouncing back.</p>
+    <p>Fields are normalized so E and H share units. A conductor forces E<sub>z</sub> = 0. Glass has ε<sub>r</sub> = n², which slows the wave to c/n. The edges are wrapped in a 20-cell perfectly matched layer (PML): E<sub>z</sub> is split into two parts so that waves moving in x and in y can be damped separately, which absorbs waves arriving at any angle. The measured reflection is below −99 dB; see VALIDATION.md.</p>
   </div>
 </section>
 
 <!-- Plain scripts (not ES modules) so the page also runs when opened straight from disk. -->
 <script src="js/solver.js"></script>
 <script src="js/presets.js"></script>
+<script src="js/measure.js"></script>
 <script src="js/render.js"></script>
 <script src="js/main.js"></script>
 </body>

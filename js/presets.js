@@ -35,14 +35,14 @@
     refract: {
       name: 'Refraction',
       view: 'field',
-      snell: true,
+      measure: { uI: 120, thetaInc: 25 },
       build(sim) {
-        sim.sources = [{ type: 'line', u: 8, angle: 25, width: 26, vc: 52 }];
-        rect(sim, 165, 0, sim.W - 1, sim.H - 1, WL.GLASS);
+        sim.sources = [{ type: 'line', u: 8, angle: 25 }];   // plane wave tilted 25 degrees
+        rect(sim, 120, 0, sim.W - 1, sim.H - 1, WL.GLASS);
       },
       title: 'Refraction and reflection at glass',
-      body: `<p>A beam tilted at 25° crosses from vacuum into glass. Inside the glass the wave travels at c/n, so the wavelength shrinks and the beam bends toward the normal. Part of the wave reflects back up and to the left.</p>
-<p>Raise the refractive index to bend the beam more and strengthen the reflection. The bending angle comes out of Maxwell's equations alone; Snell's law is never coded in.</p>`
+      body: `<p>A plane wave tilted at 25° crosses from vacuum into glass. Inside the glass the wave travels at c/n, so the wavelength shrinks and the wavefronts turn toward the normal. Part of the wave reflects, and where it overlaps the incoming wave you see an interference pattern on the vacuum side.</p>
+<p>The readout below measures the transmitted angle and the wave speed directly from the simulated field, using the phase difference between neighbouring cells, and compares them with Snell's law and c/n. Snell's law is never coded in. Raise the refractive index and the error grows, because each wavelength inside the glass is covered by fewer grid cells.</p>`
     },
 
     lens: {

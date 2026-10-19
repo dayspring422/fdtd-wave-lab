@@ -7,6 +7,7 @@
   const $ = id => document.getElementById(id);
   const sim = WL.createSolver();
   const renderer = WL.createRenderer(sim, $('field'), $('overlay'));
+  const lock = WL.createLockIn(sim, { settle: 900 });   // measures the field for the readout
   const { W, H, K } = sim;
   const BRUSH = 4;  // brush radius in cells
 
@@ -34,8 +35,15 @@
     $('exTitle').textContent = p.title;
     $('exBody').innerHTML = p.body;
     document.querySelectorAll('#presets .chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === id));
+    lock.reset();
     updateReadout();
     sim.dirty = true;
+  }
+
+  // Advance one time step, feeding the lock-in amplifier when this preset measures.
+  function advance() {
+    sim.step();
+    if (WL.PRESETS[ui.preset].measure) lock.sample();
   }
 
   const presetBar = $('presets');
@@ -60,15 +68,24 @@
       `<span>glass speed <b>${(1 / sim.n).toFixed(2)}c</b></span>`;
   }
 
-  // Theory predictions to compare against what the simulation shows.
+  // Measured values next to theory. For refraction everything on the left of the comparison
+  // is read from the simulated field (see measure.js); only the incident angle is an input.
   function updateReadout() {
     const r = $('readout');
-    if (WL.PRESETS[ui.preset].snell) {
-      const t1 = 25;
-      const t2 = Math.asin(Math.sin(t1 * Math.PI / 180) / sim.n) * 180 / Math.PI;
-      const R = ((1 - sim.n) / (1 + sim.n)) ** 2;
+    const m = WL.PRESETS[ui.preset].measure;
+    if (m) {
       r.hidden = false;
-      r.textContent = `Snell's law prediction: θ₁ = ${t1.toFixed(1)}°, θ₂ = ${t2.toFixed(1)}°   ·   normal-incidence reflectance ≈ ${(R * 100).toFixed(1)}%`;
+      if (!lock.ready) {
+        r.textContent = `Measuring from the field: waiting for steady state (${Math.round(lock.progress() * 100)}%)`;
+        return;
+      }
+      const res = WL.measureTransmitted(sim, lock, m);
+      const spErr = Math.abs(res.speed - res.speedTheory) / res.speedTheory * 100;
+      r.innerHTML =
+        `<span>θ₁ = ${m.thetaInc.toFixed(1)}° (set at the source)</span>` +
+        `<span>θ₂ measured from the field: <b>${res.theta2.toFixed(2)}°</b></span>` +
+        `<span>Snell's law predicts ${res.predicted.toFixed(2)}° · difference ${res.errPct.toFixed(2)}%</span>` +
+        `<span>Speed in glass: measured <b>${res.speed.toFixed(3)}c</b>, theory c/n = ${res.speedTheory.toFixed(3)}c · difference ${spErr.toFixed(2)}%</span>`;
     } else if (ui.preset === 'guide') {
       r.hidden = false;
       r.textContent = `Critical angle for total internal reflection: θc = ${(Math.asin(1 / sim.n) * 180 / Math.PI).toFixed(1)}° (from the strip's edge normal)`;
@@ -102,6 +119,7 @@
       sim.sources = sim.sources.filter(s => s.type !== 'point' || (s.u - c.u) ** 2 + (s.v - c.v) ** 2 > (BRUSH + 2) ** 2);
     }
     sim.dirty = true;
+    lock.reset();
   }
 
   const overlay = $('overlay');
@@ -114,6 +132,7 @@
       if (hit >= 0) sim.sources.splice(hit, 1);
       else if (sim.sources.filter(s => s.type === 'point').length < 12) sim.sources.push({ type: 'point', u: c.u, v: c.v, phase: 0 });
       sim.dirty = true;
+      lock.reset();
       return;
     }
     down = true; last = c;
@@ -141,9 +160,9 @@
     glass: 'Drag to paint glass with the refractive index set below.',
     erase: 'Drag to erase drawings and point sources.'
   };
-  document.querySelectorAll('.tool').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#tools .tool').forEach(b => b.addEventListener('click', () => {
     ui.tool = b.dataset.tool;
-    document.querySelectorAll('.tool').forEach(x => x.setAttribute('aria-pressed', x === b));
+    document.querySelectorAll('#tools .tool').forEach(x => x.setAttribute('aria-pressed', x === b));
     $('toolHint').textContent = HINTS[ui.tool];
   }));
 
@@ -159,6 +178,7 @@
     $('nIdx').value = n;
     $('nOut').textContent = n.toFixed(2);
     sim.dirty = true;
+    lock.reset();
     updateReadout();
   }
   function setPlay(r) {
@@ -167,8 +187,15 @@
   }
 
   $('play').addEventListener('click', () => setPlay(!ui.running));
-  $('stepBtn').addEventListener('click', () => { setPlay(false); sim.step(); });
-  $('resetFields').addEventListener('click', () => { sim.clearFields(); renderer.scale = 20; });
+  $('stepBtn').addEventListener('click', () => { setPlay(false); advance(); });
+  $('resetFields').addEventListener('click', () => { sim.clearFields(); lock.reset(); renderer.scale = 20; });
+
+  // Boundary switch: compare the split-field PML with the older graded-loss layer.
+  document.querySelectorAll('#bounds .tool').forEach(b => b.addEventListener('click', () => {
+    sim.setBoundary(b.dataset.b);
+    document.querySelectorAll('#bounds .tool').forEach(x => x.setAttribute('aria-pressed', x === b));
+    lock.reset();
+  }));
   $('viewField').addEventListener('click', () => setView('field'));
   $('viewInt').addEventListener('click', () => setView('intensity'));
   $('clearAll').addEventListener('click', () => { sim.mat.fill(WL.VACUUM); sim.sources = []; sim.clearFields(); sim.dirty = true; });
@@ -193,14 +220,16 @@
   loadPreset('slit');
   setPlay(ui.running);
   // Warm up so the first frame already shows waves instead of an empty screen.
-  for (let s = 0; s < 260; s++) sim.step();
+  for (let s = 0; s < 260; s++) advance();
   for (let s = 0; s < 30; s++) renderer.autoscale(ui.view);
 
   let frame = 0;
   function loop() {
-    if (ui.running) for (let s = 0; s < ui.speed; s++) sim.step();
+    if (ui.running) for (let s = 0; s < ui.speed; s++) advance();
     else if (sim.dirty) sim.computeCoeffs();
-    if (frame++ % 6 === 0) renderer.autoscale(ui.view);
+    if (frame % 6 === 0) renderer.autoscale(ui.view);
+    if (frame % 15 === 0 && WL.PRESETS[ui.preset].measure) updateReadout();
+    frame++;
     renderer.render({ view: ui.view, gain: ui.gain, hover: ui.hover, tool: ui.tool, brush: BRUSH });
     updateStatus();
     requestAnimationFrame(loop);
